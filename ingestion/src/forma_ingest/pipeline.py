@@ -69,6 +69,37 @@ def _item_rects(doc: DoclingDocument, items, limit: int = 4) -> list[SourceRect]
     return rects
 
 
+def _table_contexts(doc: DoclingDocument, window: int = 1200) -> dict[int, str]:
+    """Walk the document in reading order; for each table, capture the tail of
+    the content that precedes it (headings, prose, and the head of the prior
+    table — which usually contains the identifying first-column values)."""
+    contexts: dict[int, str] = {}
+    recent: list[str] = []
+
+    def tail() -> str:
+        text = "\n".join(recent)
+        return text[-window:] if len(text) > window else text
+
+    try:
+        for item, _level in doc.iterate_items():
+            if isinstance(item, TableItem):
+                contexts[id(item)] = tail()
+                try:
+                    md = item.export_to_markdown(doc=doc)
+                    recent.append(md[:400])  # head rows carry identity cells
+                except Exception:
+                    pass
+            else:
+                text = getattr(item, "text", None)
+                if text:
+                    recent.append(text)
+            if sum(len(s) for s in recent) > window * 4:
+                recent[:] = ["\n".join(recent)[-window * 2 :]]
+    except Exception as e:
+        log.warning("reading-order context walk failed: %s", e)
+    return contexts
+
+
 def extract_chunks(doc: DoclingDocument, doc_id: str, max_tokens: int = DEFAULT_MAX_TOKENS) -> tuple[list[Chunk], list[Chunk]]:
     """Returns (text_chunks, table_parents).
 
@@ -78,6 +109,13 @@ def extract_chunks(doc: DoclingDocument, doc_id: str, max_tokens: int = DEFAULT_
     used as the embedding text.
     """
     # --- tables (parents) ----------------------------------------------------
+    # Reading-order context per table (contextual retrieval): continuation
+    # tables often never repeat their subject ("New York" appears pages before
+    # the row content), so each table records the tail of what precedes it —
+    # including the head of a previous table, whose first cells usually carry
+    # the identifying values.
+    contexts = _table_contexts(doc)
+
     table_parents: list[Chunk] = []
     for i, table in enumerate(doc.tables):
         md = table.export_to_markdown(doc=doc)
@@ -91,6 +129,7 @@ def extract_chunks(doc: DoclingDocument, doc_id: str, max_tokens: int = DEFAULT_
                 content=md,
                 page=rects[0].page if rects else None,
                 rects=rects,
+                context=contexts.get(id(table)),
             )
         )
 

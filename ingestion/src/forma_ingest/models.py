@@ -25,6 +25,10 @@ class Chunk:
     parent_id: str | None = None
     page: int | None = None
     rects: list[SourceRect] = field(default_factory=list)
+    # Processing-only (not uploaded): reading-order context preceding a table,
+    # used for contextual-retrieval summaries (Anthropic technique — a chunk is
+    # situated within the document before being embedded/indexed).
+    context: str | None = None
 
     def to_payload(self) -> dict:
         out: dict = {"id": self.id, "kind": self.kind, "content": self.content}

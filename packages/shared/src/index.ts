@@ -91,6 +91,13 @@ export interface FormSection {
 export interface FormSchema {
   documentId: string;
   title: string;
+  /**
+   * "faithful": mirrors an official fillable form's own structure.
+   * "example": the document is a requirements list/checklist with no standard
+   * form — this schema is a designed applicant flow derived from those
+   * requirements (badged in the UI for honesty).
+   */
+  formKind?: "faithful" | "example";
   sections: FormSection[];
 }
 

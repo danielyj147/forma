@@ -22,34 +22,69 @@ HAIKU = "claude-haiku-4-5"
 # ---------------------------------------------------------------------------
 
 
-def summarize_table(client: Anthropic, table_md: str, doc_title: str) -> str:
+TABLE_SUMMARY_JSON = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["situating_line", "summary"],
+    "properties": {
+        "situating_line": {
+            "type": "string",
+            "description": "One sentence situating this table within the document, naming the specific subject (jurisdiction/state, form part, entity) it belongs to — inferred from the preceding context.",
+        },
+        "summary": {
+            "type": "string",
+            "description": "Dense retrieval summary: what the table lists, columns, notable exact values (fees, deadlines, thresholds, bond amounts).",
+        },
+    },
+}
+
+
+def summarize_table(client: Anthropic, table_md: str, doc_title: str, context: str | None) -> dict:
+    """Contextual retrieval (Anthropic technique): the summary is generated with
+    the preceding document content so continuation tables get situated — e.g.
+    'This table continues New York's money transmitter licensing requirements.'
+    The situating line is written into both the embedded child AND the parent
+    table, so state-scoped queries can match either leg."""
+    context_block = f"<preceding_document_content>\n{context}\n</preceding_document_content>\n\n" if context else ""
     response = client.messages.create(
         model=HAIKU,
-        max_tokens=300,
+        max_tokens=500,
         system=(
-            "Write a dense retrieval summary of the table from a regulatory "
-            "licensing document. One short paragraph: what the table lists, its "
-            "columns, notable exact values (fees, deadlines, thresholds, bond "
-            "amounts) and categories. No preamble."
+            "You summarize one table from a regulatory licensing document for a retrieval "
+            "index. Use the preceding document content to determine WHAT specific subject "
+            "(state/jurisdiction, form part, section) the table belongs to — continuation "
+            "tables often do not repeat their subject. Never invent a subject not supported "
+            "by the context; if genuinely unclear, situate by document and page area only."
         ),
-        messages=[{"role": "user", "content": f"Document: {doc_title}\n\n{table_md[:6000]}"}],
+        messages=[
+            {
+                "role": "user",
+                "content": f"Document: {doc_title}\n\n{context_block}<table>\n{table_md[:6000]}\n</table>",
+            }
+        ],
+        output_config={"format": {"type": "json_schema", "schema": TABLE_SUMMARY_JSON}},
     )
-    return response.content[0].text.strip()
+    return json.loads(response.content[0].text)
 
 
 def build_table_summaries(client: Anthropic, parents: list[Chunk], doc_title: str) -> list[Chunk]:
     children: list[Chunk] = []
     for parent in parents:
         try:
-            summary = summarize_table(client, parent.content, doc_title)
+            out = summarize_table(client, parent.content, doc_title, parent.context)
+            situating, summary = out["situating_line"].strip(), out["summary"].strip()
         except Exception as e:  # keep ingesting even if one summary fails
             log.warning("table summary failed for %s: %s", parent.id, e)
-            summary = parent.content[:800]
+            situating, summary = "", parent.content[:800]
+        # Parent carries the situating line too: BM25 over the full table and
+        # the LLM reading the swapped-in parent both see the subject.
+        if situating:
+            parent.content = f"{situating}\n\n{parent.content}"
         children.append(
             Chunk(
                 id=f"{parent.id}:s",
                 kind="table_summary",
-                content=summary,
+                content=f"{situating} {summary}".strip(),
                 parent_id=parent.id,
                 page=parent.page,
                 rects=parent.rects,
@@ -285,6 +320,40 @@ def _validate_schema(schema: dict) -> int:
     return warnings
 
 
+EXAMPLE_FORM_SYSTEM = """The document below is NOT a fillable form — it is a requirements list / checklist / guidance for a license application that has no standard form (applicants typically assemble documents and answers themselves). Design the intuitive web application form that SHOULD exist: the form an applicant would fill once, instead of reading the whole document.
+
+Rules:
+- Applicant-centric flow: About the applicant → Business details → Ownership & control persons → Financials → Compliance → Required documents (as `file` upload fields) → Attestations. Only include sections the document's requirements actually call for.
+- EVERY field must be traceable to a requirement in the document; cite the requirement briefly in `help` (fee amounts, statute refs). Do not invent requirements.
+- Use skip-logic (visibleIf/requiredIf) where requirements are conditional; radio/select for choose-one, checkbox for yes/no or check-all.
+- ids: short snake_case, unique. 3-25 fields per section. This is a product demonstration of what a clean form feels like — favor clarity over exhaustiveness."""
+
+
+def generate_example_form_schema(client: Anthropic, doc_markdown: str, doc_id: str, title: str) -> dict:
+    """One-shot Opus design pass — example forms optimize for applicant UX
+    derived from requirements, not structural fidelity (ADR-7 addendum)."""
+    with client.messages.stream(
+        model=OPUS,
+        max_tokens=24_000,
+        system=EXAMPLE_FORM_SYSTEM,
+        messages=[
+            {
+                "role": "user",
+                "content": f"Document title: {title}\n\n<document_markdown>\n{doc_markdown[:100_000]}\n</document_markdown>",
+            }
+        ],
+        output_config={"format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
+    ) as stream:
+        response = stream.get_final_message()
+    schema = json.loads(response.content[0].text)
+    _validate_schema(schema)
+    schema["documentId"] = doc_id
+    schema["formKind"] = "example"
+    n = sum(len(s["fields"]) for s in schema["sections"])
+    log.info("  example form: %d sections, %d fields", len(schema["sections"]), n)
+    return schema
+
+
 def generate_form_schema(client: Anthropic, doc_markdown: str, doc_id: str, title: str) -> dict:
     sections = _split_sections(doc_markdown)
     log.info("  map stage: %d sections (Haiku)", len(sections))
@@ -302,6 +371,7 @@ def generate_form_schema(client: Anthropic, doc_markdown: str, doc_id: str, titl
     schema = _critique_repair(client, {"title": title, "sections": draft_sections}, title)
     _validate_schema(schema)
     schema["documentId"] = doc_id
+    schema["formKind"] = "faithful"
     n_final = sum(len(s["fields"]) for s in schema["sections"])
     n_cond = sum(
         1 for s in schema["sections"] for f in s["fields"] if f.get("visibleIf") or f.get("requiredIf")

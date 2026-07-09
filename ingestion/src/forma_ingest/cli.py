@@ -52,6 +52,12 @@ def main() -> None:
         help="Skip parsing/LLM: upload a data/processed/*.json produced by --dry-run (with --file as the PDF)",
     )
     parser.add_argument(
+        "--form-mode",
+        default="faithful",
+        choices=["faithful", "example"],
+        help="faithful: mirror an official fillable form's structure; example: design an applicant-centric form from a requirements/checklist document with no standard form",
+    )
+    parser.add_argument(
         "--schema-only",
         action="store_true",
         help="Re-parse the PDF, regenerate ONLY the form schema (map/reduce pipeline) and PATCH it — chunks/vectors untouched",
@@ -99,8 +105,13 @@ def main() -> None:
         if not args.doc_id:
             raise SystemExit("--schema-only requires --doc-id (the existing document id)")
         client = Anthropic()
-        log.info("▶ regenerating form schema (map: Haiku / reduce: Opus 4.8)…")
-        form_schema = generate_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
+        if args.form_mode == "example":
+            from .llm import generate_example_form_schema
+            log.info("▶ designing example form (Opus 4.8, requirements-derived)…")
+            form_schema = generate_example_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
+        else:
+            log.info("▶ regenerating form schema (map: Haiku / reduce: Opus 4.8)…")
+            form_schema = generate_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
         matched = attach_field_sources(doc, form_schema)
         log.info("  %d fields matched to PDF coordinates", matched)
 
@@ -140,7 +151,11 @@ def main() -> None:
         log.info("▶ generating form schema (Haiku 4.5, structured output)…")
         try:
             markdown = doc.export_to_markdown()
-            form_schema = generate_form_schema(client, markdown, doc_id, title)
+            if args.form_mode == "example":
+                from .llm import generate_example_form_schema
+                form_schema = generate_example_form_schema(client, markdown, doc_id, title)
+            else:
+                form_schema = generate_form_schema(client, markdown, doc_id, title)
             matched = attach_field_sources(doc, form_schema)
             n_fields = sum(len(s["fields"]) for s in form_schema["sections"])
             log.info("✔ schema: %d sections, %d fields (%d with PDF coordinates)",

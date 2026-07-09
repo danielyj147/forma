@@ -47,7 +47,7 @@ admin.post("/api/admin/documents", async (c) => {
      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
      ON CONFLICT(id) DO UPDATE SET
        title=?2, state=?3, license_type=?4, source_url=?5, filing_date=?6,
-       page_count=?7, form_schema=?8, docling_version=?9`,
+       page_count=?7, form_schema=COALESCE(?8, form_schema), docling_version=?9`,
   )
     .bind(
       doc.id,

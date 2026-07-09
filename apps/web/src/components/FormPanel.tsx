@@ -72,6 +72,15 @@ export function FormPanel({
               </Badge>
             )}
             {doc.licenseType && <Badge variant="secondary">{doc.licenseType}</Badge>}
+            {schemaState.status === "ready" && schemaState.schema.formKind === "example" && (
+              <Badge
+                variant="outline"
+                className="border-dashed text-muted-foreground"
+                title="This document is a requirements checklist with no standard fillable form — this form is a designed applicant flow derived from those requirements."
+              >
+                Example form
+              </Badge>
+            )}
           </span>
         </div>
         {progress && progress.total > 0 && (

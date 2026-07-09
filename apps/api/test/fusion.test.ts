@@ -92,3 +92,25 @@ describe("toFtsQuery", () => {
     expect(q.split(" OR ")).toHaveLength(32);
   });
 });
+
+describe("toFtsQuery state expansion", () => {
+  it("expands unambiguous abbreviations regardless of case", () => {
+    expect(toFtsQuery("net worth in ny")).toContain('"new york"');
+    expect(toFtsQuery("CA bond amount")).toContain('"california"');
+  });
+
+  it("expands full state names to abbreviations", () => {
+    expect(toFtsQuery("New York disclosures")).toContain('"ny"');
+  });
+
+  it("expands ambiguous abbreviations only when uppercase", () => {
+    expect(toFtsQuery("licensed in Georgia")).not.toContain('"indiana"');
+    expect(toFtsQuery("requirements IN Indiana")).toContain('"indiana"');
+    expect(toFtsQuery("fees OR bonds")).toContain('"oregon"');
+    expect(toFtsQuery("fees or bonds")).not.toContain('"oregon"');
+  });
+
+  it("leaves stateless queries untouched", () => {
+    expect(toFtsQuery("surety bond amount")).toBe('"surety" OR "bond" OR "amount"');
+  });
+});

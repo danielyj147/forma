@@ -12,6 +12,13 @@ const PER_IP_HOURLY = 40;
 const GLOBAL_DAILY = 400;
 
 export async function rateLimit(c: AppContext, next: Next): Promise<Response | void> {
+  // Authenticated eval/ingest traffic (Bearer INGEST_TOKEN) is exempt — the
+  // parameter sweeps in scripts/evaluate.py issue hundreds of searches.
+  const header = c.req.header("authorization") ?? "";
+  if (c.env.INGEST_TOKEN && header === `Bearer ${c.env.INGEST_TOKEN}`) {
+    return next();
+  }
+
   const now = new Date();
   const hour = now.toISOString().slice(0, 13); // yyyy-mm-ddThh
   const day = now.toISOString().slice(0, 10);

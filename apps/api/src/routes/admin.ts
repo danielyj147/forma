@@ -18,6 +18,17 @@ admin.get("/api/admin/health", (c) =>
   c.json({ ok: true, environment: c.env.ENVIRONMENT, mockAi: c.env.DEV_MOCK_AI === "1" }),
 );
 
+// Chunk listing for golden-dataset generation (scripts/evaluate.py --generate)
+admin.get("/api/admin/chunks", async (c) => {
+  const documentId = c.req.query("documentId");
+  const where = documentId ? "WHERE document_id = ?1" : "";
+  const stmt = c.env.DB.prepare(
+    `SELECT id, document_id, parent_id, kind, content, page_number FROM chunks ${where}`,
+  );
+  const res = await (documentId ? stmt.bind(documentId) : stmt).all();
+  return c.json({ chunks: res.results });
+});
+
 admin.post("/api/admin/documents", async (c) => {
   const doc = (await c.req.json()) as AdminDocumentUpsert;
   if (!doc.id || !doc.title) return c.json({ error: "id and title required" }, 400);

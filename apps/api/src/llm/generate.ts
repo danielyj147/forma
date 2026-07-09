@@ -19,6 +19,7 @@ export function buildCitations(results: SearchResult[]): Citation[] {
     page: r.page,
     rects: r.rects,
     snippet: r.content.slice(0, 240),
+    content: r.content,
   }));
 }
 

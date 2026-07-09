@@ -175,6 +175,8 @@ export interface Citation {
   page: number | null;
   rects: SourceRect[];
   snippet: string;
+  /** Full retrieved content — used by the eval harness for faithfulness judging. */
+  content?: string;
 }
 
 /** SSE events streamed by /api/chat. */

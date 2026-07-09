@@ -23,7 +23,8 @@ const ROUTE_SCHEMA = {
   properties: {
     needsRetrieval: {
       type: "boolean",
-      description: "false only for greetings/meta-questions that need no document knowledge",
+      description:
+        "true for ANY question about regulations, licensing, fees, forms, or requirements — even if it looks like no ingested document covers it (retrieval + the grounding policy decide that). false ONLY for greetings, thanks, or questions about the assistant itself.",
     },
     query: {
       type: "string",

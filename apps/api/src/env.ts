@@ -1,7 +1,8 @@
 export interface Env {
   DB: D1Database;
-  VECTORS: VectorizeIndex;
-  AI: Ai;
+  /** Absent in local dev (no simulator) — mock paths take over, see embeddings.ts */
+  VECTORS?: VectorizeIndex;
+  AI?: Ai;
   PDFS: R2Bucket;
   RL: KVNamespace;
   ASSETS: Fetcher;

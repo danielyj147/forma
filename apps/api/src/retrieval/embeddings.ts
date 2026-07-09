@@ -14,7 +14,8 @@ export const RERANKER_MODEL = "@cf/baai/bge-reranker-base";
 const AI_BATCH = 90;
 
 export function useMockAi(env: Env): boolean {
-  return env.DEV_MOCK_AI === "1";
+  // Explicit opt-in, or the bindings simply aren't there (local dev config).
+  return env.DEV_MOCK_AI === "1" || !env.AI || !env.VECTORS;
 }
 
 export async function embedTexts(env: Env, texts: string[]): Promise<number[][]> {
@@ -24,7 +25,7 @@ export async function embedTexts(env: Env, texts: string[]): Promise<number[][]>
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += AI_BATCH) {
     const batch = texts.slice(i, i + AI_BATCH);
-    const res = (await env.AI.run(EMBEDDING_MODEL as never, { text: batch } as never)) as unknown as {
+    const res = (await env.AI!.run(EMBEDDING_MODEL as never, { text: batch } as never)) as unknown as {
       data: number[][];
     };
     if (!res?.data || res.data.length !== batch.length) {
@@ -52,7 +53,7 @@ export async function rerankByQuery(
   // bge-reranker-base scores (query, passage) pairs; truncate passages to keep
   // within the model's 512-token window — the head of a chunk carries its topic.
   const contexts = docs.map((d) => ({ text: d.text.slice(0, 1600) }));
-  const res = (await env.AI.run(RERANKER_MODEL as never, { query, contexts } as never)) as unknown as {
+  const res = (await env.AI!.run(RERANKER_MODEL as never, { query, contexts } as never)) as unknown as {
     response: Array<{ id: number; score: number }>;
   };
   for (const item of res.response ?? []) {

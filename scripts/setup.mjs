@@ -185,6 +185,7 @@ function writeDeployConfig(envName, state) {
     name: state.names.worker,
     main: "src/index.ts",
     compatibility_date: "2026-06-01",
+    compatibility_flags: ["nodejs_compat"],
     assets: {
       directory: "../web/dist",
       binding: "ASSETS",

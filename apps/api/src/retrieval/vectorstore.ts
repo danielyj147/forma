@@ -30,7 +30,7 @@ export async function vectorQuery(
   if (filters?.state) filter.state = filters.state;
   if (filters?.licenseType) filter.license_type = filters.licenseType;
 
-  const res = await env.VECTORS.query(vector, {
+  const res = await env.VECTORS!.query(vector, {
     topK,
     returnValues: false,
     returnMetadata: "none",
@@ -51,7 +51,7 @@ export async function vectorUpsert(env: Env, items: VectorItem[]): Promise<void>
     return;
   }
   for (let i = 0; i < items.length; i += 500) {
-    await env.VECTORS.upsert(items.slice(i, i + 500));
+    await env.VECTORS!.upsert(items.slice(i, i + 500));
   }
 }
 
@@ -63,7 +63,7 @@ export async function vectorDelete(env: Env, ids: string[]): Promise<void> {
     return;
   }
   for (let i = 0; i < ids.length; i += 500) {
-    await env.VECTORS.deleteByIds(ids.slice(i, i + 500));
+    await env.VECTORS!.deleteByIds(ids.slice(i, i + 500));
   }
 }
 

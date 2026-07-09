@@ -12,6 +12,10 @@ dist/
 .wrangler/
 *.tsbuildinfo
 
+# Account-specific provisioning state + generated deploy configs (npm run setup)
+.forma/
+.wrangler.*.jsonc
+
 # Python
 .venv/
 __pycache__/

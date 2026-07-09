@@ -133,6 +133,21 @@ admin.post("/api/admin/chunks", async (c) => {
   return c.json({ ok: true, inserted: body.chunks.length, embedded: embeddable.length });
 });
 
+admin.delete("/api/admin/documents/:id", async (c) => {
+  const id = c.req.param("id");
+  const chunks = await c.env.DB.prepare("SELECT id FROM chunks WHERE document_id = ?1")
+    .bind(id)
+    .all<{ id: string }>();
+  await vectorDelete(c.env, chunks.results.map((r) => r.id));
+  await c.env.DB.prepare("DELETE FROM chunks WHERE document_id = ?1").bind(id).run();
+  const doc = await c.env.DB.prepare("SELECT pdf_key FROM documents WHERE id = ?1")
+    .bind(id)
+    .first<{ pdf_key: string | null }>();
+  if (doc?.pdf_key) await c.env.PDFS.delete(doc.pdf_key);
+  await c.env.DB.prepare("DELETE FROM documents WHERE id = ?1").bind(id).run();
+  return c.json({ ok: true, deletedChunks: chunks.results.length });
+});
+
 admin.put("/api/admin/pdf/:documentId", async (c) => {
   const documentId = c.req.param("documentId");
   const doc = await c.env.DB.prepare("SELECT id FROM documents WHERE id = ?1")

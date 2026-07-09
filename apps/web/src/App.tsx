@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { Citation, DocumentSummary, FormContextEntry, FormField } from "@forma/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Citation, FormContextEntry, FormField } from "@forma/shared";
 import { ChevronDownIcon, FileSearchIcon, FileTextIcon, RefreshCwIcon, ServerOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,22 +22,15 @@ import { cn } from "@/lib/utils";
 /** Lazy so pdf.js (~500 kB) stays out of the initial bundle. */
 const PdfViewer = lazy(() => import("@/components/PdfViewer"));
 
-type DocsState =
-  | { status: "loading" }
-  | { status: "error"; network: boolean; message: string }
-  | { status: "ready"; documents: DocumentSummary[] };
-
 type TabKey = "application" | "assistant";
 
 export default function App() {
-  const [docsState, setDocsState] = useState<DocsState>({ status: "loading" });
+  const queryClient = useQueryClient();
   const [needsAccess, setNeedsAccess] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState<TabKey>("application");
 
   const [selectedFormId, setSelectedFormId] = useState<string | null>(() => loadSelectedFormId());
   const [viewerDocId, setViewerDocId] = useState<string | null>(selectedFormId);
-  const [schemaState, setSchemaState] = useState<SchemaState>({ status: "loading" });
   const [values, setValues] = useState<FormValues>(() =>
     selectedFormId ? loadFormValues(selectedFormId) : {},
   );
@@ -46,34 +40,41 @@ export default function App() {
   const [pdfOpenMobile, setPdfOpenMobile] = useState(false);
 
   // ------------------------------------------------------------------
-  // Data loading
+  // Server state (TanStack Query)
   // ------------------------------------------------------------------
 
   useEffect(() => onAccessRequired(() => setNeedsAccess(true)), []);
 
-  useEffect(() => {
-    let alive = true;
-    setDocsState((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
-    fetchDocuments()
-      .then((documents) => {
-        if (alive) setDocsState({ status: "ready", documents });
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        if (err instanceof ApiError && err.isAccessRequired) return; // gate is showing
-        const network = err instanceof ApiError && err.isNetwork;
-        setDocsState({
-          status: "error",
-          network,
-          message: err instanceof Error ? err.message : "Failed to load documents.",
-        });
-      });
-    return () => {
-      alive = false;
-    };
-  }, [reloadKey]);
+  const documentsQuery = useQuery({
+    queryKey: ["documents"],
+    queryFn: fetchDocuments,
+  });
+  const documents = documentsQuery.data ?? null;
 
-  const documents = docsState.status === "ready" ? docsState.documents : null;
+  const schemaQuery = useQuery({
+    queryKey: ["schema", selectedFormId],
+    queryFn: () => fetchFormSchema(selectedFormId!),
+    enabled: selectedFormId !== null && documentsQuery.isSuccess,
+  });
+
+  // Adapt the query to the UI's SchemaState (404 → "no form yet"; a 401
+  // stays "loading" because the access gate is already overlaid on top).
+  let schemaState: SchemaState;
+  if (schemaQuery.isSuccess) {
+    schemaState = { status: "ready", schema: schemaQuery.data };
+  } else if (schemaQuery.isError) {
+    const err = schemaQuery.error;
+    if (err instanceof ApiError && err.status === 404) schemaState = { status: "none" };
+    else if (err instanceof ApiError && err.isAccessRequired) schemaState = { status: "loading" };
+    else {
+      schemaState = {
+        status: "error",
+        message: err instanceof Error ? err.message : "Failed to load the form schema.",
+      };
+    }
+  } else {
+    schemaState = { status: "loading" };
+  }
 
   // Drop a persisted selection that no longer exists on the server.
   useEffect(() => {
@@ -87,31 +88,6 @@ export default function App() {
       setViewerDocId(null);
     }
   }, [documents, selectedFormId, viewerDocId]);
-
-  // Fetch the form schema for the selected form.
-  useEffect(() => {
-    if (!selectedFormId || !documents) return;
-    let alive = true;
-    setSchemaState({ status: "loading" });
-    fetchFormSchema(selectedFormId)
-      .then((schema) => {
-        if (alive) setSchemaState({ status: "ready", schema });
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        if (err instanceof ApiError && err.status === 404) setSchemaState({ status: "none" });
-        else if (err instanceof ApiError && err.isAccessRequired) setSchemaState({ status: "loading" });
-        else {
-          setSchemaState({
-            status: "error",
-            message: err instanceof Error ? err.message : "Failed to load the form schema.",
-          });
-        }
-      });
-    return () => {
-      alive = false;
-    };
-  }, [selectedFormId, documents, reloadKey]);
 
   // ------------------------------------------------------------------
   // Handlers
@@ -170,9 +146,10 @@ export default function App() {
   const handleUnlock = async (code: string): Promise<void> => {
     setAccessCode(code);
     const docs = await fetchDocuments(); // throws on a bad code
-    setDocsState({ status: "ready", documents: docs });
+    queryClient.setQueryData(["documents"], docs);
     setNeedsAccess(false);
-    setReloadKey((key) => key + 1);
+    // Everything that failed behind the gate (schema, stale documents) refetches.
+    await queryClient.invalidateQueries();
   };
 
   // ------------------------------------------------------------------
@@ -182,28 +159,36 @@ export default function App() {
   const selectedForm = documents?.find((d) => d.id === selectedFormId) ?? null;
   const viewerDoc = documents?.find((d) => d.id === viewerDocId) ?? null;
 
+  const documentsError = documentsQuery.error;
+  const accessPending =
+    documentsQuery.isError &&
+    documentsError instanceof ApiError &&
+    documentsError.isAccessRequired;
+
   let content: ReactNode;
-  if (docsState.status === "loading") {
+  if (documentsQuery.isPending || accessPending) {
+    // 401 keeps the skeleton — the access gate is overlaid on top of it.
     content = <SplitSkeleton />;
-  } else if (docsState.status === "error") {
-    content = docsState.network ? (
+  } else if (documentsQuery.isError) {
+    const network = documentsError instanceof ApiError && documentsError.isNetwork;
+    content = network ? (
       <CenteredNotice
         icon={<ServerOffIcon className="size-5" aria-hidden />}
         title="Backend not running"
         body="The web app couldn't reach the Forma API. From the repository root, start both servers:"
         code="npm run dev"
         footnote="Requests to /api proxy to http://localhost:8787 in development."
-        onRetry={() => setReloadKey((key) => key + 1)}
+        onRetry={() => void documentsQuery.refetch()}
       />
     ) : (
       <CenteredNotice
         icon={<ServerOffIcon className="size-5" aria-hidden />}
         title="Couldn't load documents"
-        body={docsState.message}
-        onRetry={() => setReloadKey((key) => key + 1)}
+        body={documentsError instanceof Error ? documentsError.message : "Failed to load documents."}
+        onRetry={() => void documentsQuery.refetch()}
       />
     );
-  } else if (docsState.documents.length === 0) {
+  } else if (documentsQuery.data.length === 0) {
     content = (
       <CenteredNotice
         icon={<FileSearchIcon className="size-5" aria-hidden />}
@@ -211,7 +196,7 @@ export default function App() {
         body="Ingest your first licensing PDF — Docling parses it, tables and all, and Forma turns it into a structured form:"
         code="python scripts/ingest.py --file <path-to-pdf>"
         footnote="Then refresh this page to see it in the picker."
-        onRetry={() => setReloadKey((key) => key + 1)}
+        onRetry={() => void documentsQuery.refetch()}
         retryLabel="Refresh"
       />
     );
@@ -248,11 +233,11 @@ export default function App() {
                   onValueChange={handleValueChange}
                   onShowSource={handleShowSource}
                   onBack={handleBackToPicker}
-                  onRetry={() => setReloadKey((key) => key + 1)}
+                  onRetry={() => void schemaQuery.refetch()}
                   onAskAssistant={() => setTab("assistant")}
                 />
               ) : (
-                <FormPicker documents={docsState.documents} onSelect={handleSelectForm} />
+                <FormPicker documents={documentsQuery.data} onSelect={handleSelectForm} />
               )}
             </TabsContent>
             <TabsContent

@@ -282,7 +282,9 @@ def _critique_repair(client: Anthropic, draft: dict, title: str) -> dict:
                 "content": f"Document: {title}\n\n<draft_schema>\n{json.dumps(draft, indent=1)}\n</draft_schema>",
             }
         ],
-        output_config={"format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
+        # effort=medium: output length is dictated by schema size, not reasoning
+        # depth — the recommended Opus cost lever (schema passes dominate spend)
+        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
     ) as stream:
         response = stream.get_final_message()
     return json.loads(response.content[0].text)
@@ -342,7 +344,9 @@ def generate_example_form_schema(client: Anthropic, doc_markdown: str, doc_id: s
                 "content": f"Document title: {title}\n\n<document_markdown>\n{doc_markdown[:100_000]}\n</document_markdown>",
             }
         ],
-        output_config={"format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
+        # effort=medium: output length is dictated by schema size, not reasoning
+        # depth — the recommended Opus cost lever (schema passes dominate spend)
+        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
     ) as stream:
         response = stream.get_final_message()
     schema = json.loads(response.content[0].text)

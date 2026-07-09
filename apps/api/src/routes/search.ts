@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import type { SearchRequest, SearchResponse } from "@forma/shared";
+import type { SearchResponse } from "@forma/shared";
 import type { Env } from "../env";
 import { retrieve } from "../retrieval/search";
 import { accessCode, rateLimit } from "../middleware/guards";
+import { parseBody, searchRequestSchema } from "../validation";
 
 /**
  * Retrieval endpoint. Doubles as the eval harness's instrument: `config`
@@ -12,10 +13,8 @@ import { accessCode, rateLimit } from "../middleware/guards";
 export const search = new Hono<{ Bindings: Env }>();
 
 search.post("/api/search", accessCode, rateLimit, async (c) => {
-  const body = (await c.req.json().catch(() => null)) as SearchRequest | null;
-  if (!body?.query || typeof body.query !== "string") {
-    return c.json({ error: "Missing 'query'" }, 400);
-  }
+  const [body, err] = await parseBody(c.req.raw, searchRequestSchema);
+  if (err) return c.json(err, 400);
 
   const { results, debug } = await retrieve(
     c.env,

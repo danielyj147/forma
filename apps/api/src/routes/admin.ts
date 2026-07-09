@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { AdminChunksUpsert, AdminDocumentUpsert } from "@forma/shared";
 import type { Env } from "../env";
 import { ingestAuth } from "../middleware/guards";
 import { embedTexts } from "../retrieval/embeddings";
 import { vectorDelete, vectorUpsert } from "../retrieval/vectorstore";
+import { adminChunksSchema, adminDocumentSchema, parseBody } from "../validation";
 
 /**
  * Ingestion API (Bearer INGEST_TOKEN). The local Docling pipeline pushes
@@ -30,8 +30,8 @@ admin.get("/api/admin/chunks", async (c) => {
 });
 
 admin.post("/api/admin/documents", async (c) => {
-  const doc = (await c.req.json()) as AdminDocumentUpsert;
-  if (!doc.id || !doc.title) return c.json({ error: "id and title required" }, 400);
+  const [doc, err] = await parseBody(c.req.raw, adminDocumentSchema);
+  if (err) return c.json(err, 400);
 
   // Clear prior chunks + vectors for idempotent re-ingest
   const oldChunks = await c.env.DB.prepare("SELECT id FROM chunks WHERE document_id = ?1")
@@ -66,10 +66,8 @@ admin.post("/api/admin/documents", async (c) => {
 });
 
 admin.post("/api/admin/chunks", async (c) => {
-  const body = (await c.req.json()) as AdminChunksUpsert;
-  if (!body.documentId || !Array.isArray(body.chunks)) {
-    return c.json({ error: "documentId and chunks required" }, 400);
-  }
+  const [body, err] = await parseBody(c.req.raw, adminChunksSchema);
+  if (err) return c.json(err, 400);
 
   const doc = await c.env.DB.prepare(
     "SELECT id, state, license_type, filing_date FROM documents WHERE id = ?1",

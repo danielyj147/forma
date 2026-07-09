@@ -45,18 +45,36 @@ documents.get("/api/documents/:id/schema", async (c) => {
 });
 
 documents.get("/api/pdf/:id", async (c) => {
-  const row = await c.env.DB.prepare("SELECT pdf_key FROM documents WHERE id = ?1")
+  const row = await c.env.DB.prepare("SELECT pdf_key, source_url FROM documents WHERE id = ?1")
     .bind(c.req.param("id"))
-    .first<{ pdf_key: string | null }>();
-  if (!row?.pdf_key) return c.json({ error: "PDF not found" }, 404);
+    .first<{ pdf_key: string | null; source_url: string | null }>();
+  if (!row) return c.json({ error: "PDF not found" }, 404);
 
-  const obj = await c.env.PDFS.get(row.pdf_key);
-  if (!obj) return c.json({ error: "PDF object missing from storage" }, 404);
+  const headers = {
+    "content-type": "application/pdf",
+    "cache-control": "public, max-age=86400",
+  };
 
-  return new Response(obj.body, {
-    headers: {
-      "content-type": "application/pdf",
-      "cache-control": "public, max-age=3600",
-    },
-  });
+  // Preferred path: R2
+  if (row.pdf_key && c.env.PDFS) {
+    const obj = await c.env.PDFS.get(row.pdf_key);
+    if (obj) return new Response(obj.body, { headers });
+  }
+
+  // Fallback for accounts without R2: proxy the public source, edge-cached so
+  // the origin (usually a government site) is hit at most once a day per PoP.
+  if (row.source_url) {
+    const cache = caches.default;
+    const cacheKey = new Request(c.req.url);
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+
+    const upstream = await fetch(row.source_url, { redirect: "follow" });
+    if (!upstream.ok) return c.json({ error: `source fetch failed (${upstream.status})` }, 502);
+    const response = new Response(upstream.body, { headers });
+    c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
+  }
+
+  return c.json({ error: "PDF not found" }, 404);
 });

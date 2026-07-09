@@ -83,14 +83,32 @@ if (!state.vectorize) {
   console.log(`• Vectorize ${names.vectorize} already provisioned`);
 }
 
-// --- 3. R2 -------------------------------------------------------------------
-if (!state.r2) {
+// --- 3. R2 (optional — PDFs proxy from source_url without it) -----------------
+if (state.r2 === undefined) {
   console.log(`• creating R2 bucket ${names.r2}`);
-  tryWrangler(["r2", "bucket", "create", names.r2], /already (exists|owned)/i);
-  state.r2 = names.r2;
+  try {
+    wrangler(["r2", "bucket", "create", names.r2]);
+    state.r2 = names.r2;
+  } catch (e) {
+    const msg = String(e.wranglerOutput ?? "") + String(e.message ?? "");
+    if (/already (exists|owned)/i.test(msg)) {
+      state.r2 = names.r2;
+    } else if (/enable R2 through the Cloudflare Dashboard|code: 10042/.test(msg)) {
+      console.log(
+        "  ⚠ R2 is not enabled on this account — continuing WITHOUT R2.\n" +
+          "    PDFs will be proxied from each document's source_url (edge-cached).\n" +
+          "    To use R2 later: enable it at https://dash.cloudflare.com/?to=/:account/r2/overview\n" +
+          "    (requires a payment method on file; free tier is 10GB), delete the\n" +
+          '    "r2" line from .forma/' + envName + ".json, and re-run npm run setup.",
+      );
+      state.r2 = null;
+    } else {
+      fail(`wrangler r2 bucket create failed:\n${msg}`);
+    }
+  }
   saveState();
 } else {
-  console.log(`• R2 ${names.r2} already provisioned`);
+  console.log(`• R2: ${state.r2 ? `${state.r2} already provisioned` : "skipped (not enabled) — PDFs proxy from source_url"}`);
 }
 
 // --- 4. KV -------------------------------------------------------------------
@@ -216,7 +234,7 @@ function writeDeployConfig(envName, state) {
       },
     ],
     vectorize: [{ binding: "VECTORS", index_name: state.names.vectorize }],
-    r2_buckets: [{ binding: "PDFS", bucket_name: state.names.r2 }],
+    ...(state.r2 ? { r2_buckets: [{ binding: "PDFS", bucket_name: state.r2 }] } : {}),
     kv_namespaces: [{ binding: "RL", id: state.kvId }],
     vars: { ENVIRONMENT: envName },
     observability: { enabled: true },

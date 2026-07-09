@@ -143,17 +143,28 @@ admin.delete("/api/admin/documents/:id", async (c) => {
   const doc = await c.env.DB.prepare("SELECT pdf_key FROM documents WHERE id = ?1")
     .bind(id)
     .first<{ pdf_key: string | null }>();
-  if (doc?.pdf_key) await c.env.PDFS.delete(doc.pdf_key);
+  if (doc?.pdf_key && c.env.PDFS) await c.env.PDFS.delete(doc.pdf_key);
   await c.env.DB.prepare("DELETE FROM documents WHERE id = ?1").bind(id).run();
   return c.json({ ok: true, deletedChunks: chunks.results.length });
 });
 
 admin.put("/api/admin/pdf/:documentId", async (c) => {
   const documentId = c.req.param("documentId");
-  const doc = await c.env.DB.prepare("SELECT id FROM documents WHERE id = ?1")
+  const doc = await c.env.DB.prepare("SELECT id, source_url FROM documents WHERE id = ?1")
     .bind(documentId)
-    .first();
+    .first<{ id: string; source_url: string | null }>();
   if (!doc) return c.json({ error: "document not found — upsert it first" }, 404);
+
+  if (!c.env.PDFS) {
+    // R2 not enabled on this account: /api/pdf/:id proxies source_url instead.
+    return c.json({
+      ok: true,
+      stored: false,
+      note: doc.source_url
+        ? "R2 not configured — PDFs will be proxied from source_url"
+        : "R2 not configured and document has no source_url — the PDF viewer will 404 for this document",
+    });
+  }
 
   const key = `pdfs/${documentId}.pdf`;
   await c.env.PDFS.put(key, c.req.raw.body, {

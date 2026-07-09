@@ -3,7 +3,8 @@ export interface Env {
   /** Absent in local dev (no simulator) — mock paths take over, see embeddings.ts */
   VECTORS?: VectorizeIndex;
   AI?: Ai;
-  PDFS: R2Bucket;
+  /** Optional: accounts without R2 enabled proxy PDFs from source_url instead. */
+  PDFS?: R2Bucket;
   RL: KVNamespace;
   ASSETS: Fetcher;
 

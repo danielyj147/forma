@@ -129,10 +129,16 @@
   html {
     @apply font-sans;
     }
+  /* Fixed-viewport app: panels scroll internally, the page itself never does.
+     overflow:hidden at the document level also stops scroll-chaining — wheel
+     momentum left over when an inner panel bottoms out must die here, not
+     scroll the app off screen. */
   html,
   body,
   #root {
     height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
   ::selection {
     background: color-mix(in srgb, var(--primary) 16%, transparent);

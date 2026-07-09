@@ -1,0 +1,82 @@
+{
+  "dataset": "licensing-golden",
+  "env": "demo",
+  "k": 5,
+  "timestamp": "2026-07-09T14:34:04+00:00",
+  "retrieval": [
+    {
+      "label": "bm25-only",
+      "overrides": {
+        "mode": "bm25",
+        "rerank": false
+      },
+      "mrr": 0.4825,
+      "recall": 0.7073,
+      "precision": 0.1439,
+      "ndcg": 0.5391,
+      "n": 41
+    },
+    {
+      "label": "dense-only",
+      "overrides": {
+        "mode": "dense",
+        "rerank": false
+      },
+      "mrr": 0.4821,
+      "recall": 0.6585,
+      "precision": 0.1317,
+      "ndcg": 0.5263,
+      "n": 41
+    },
+    {
+      "label": "hybrid-rrf60",
+      "overrides": {
+        "mode": "hybrid",
+        "rrfK": 60,
+        "rerank": false
+      },
+      "mrr": 0.6175,
+      "recall": 0.878,
+      "precision": 0.1756,
+      "ndcg": 0.6833,
+      "n": 41
+    },
+    {
+      "label": "hybrid-rrf60+rerank",
+      "overrides": {
+        "mode": "hybrid",
+        "rrfK": 60,
+        "rerank": true
+      },
+      "mrr": 0.7528,
+      "recall": 0.878,
+      "precision": 0.1768,
+      "ndcg": 0.7847,
+      "n": 41
+    },
+    {
+      "label": "bm25+rerank",
+      "overrides": {
+        "mode": "bm25",
+        "rerank": true
+      },
+      "mrr": 0.7203,
+      "recall": 0.8293,
+      "precision": 0.1671,
+      "ndcg": 0.7481,
+      "n": 41
+    },
+    {
+      "label": "dense+rerank",
+      "overrides": {
+        "mode": "dense",
+        "rerank": true
+      },
+      "mrr": 0.7528,
+      "recall": 0.878,
+      "precision": 0.1756,
+      "ndcg": 0.7847,
+      "n": 41
+    }
+  ]
+}

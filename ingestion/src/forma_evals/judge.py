@@ -10,6 +10,22 @@ from anthropic import Anthropic
 from deepeval.models import DeepEvalBaseLLM
 
 
+def _strictify(schema: dict) -> dict:
+    """Anthropic structured outputs require additionalProperties=false on every
+    object and reject some pydantic-emitted constraints; normalize in place."""
+    if isinstance(schema, dict):
+        if schema.get("type") == "object":
+            schema["additionalProperties"] = False
+        for key in ("minLength", "maxLength", "minimum", "maximum", "multipleOf"):
+            schema.pop(key, None)
+        for value in list(schema.values()):
+            _strictify(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            _strictify(item)
+    return schema
+
+
 class AnthropicJudge(DeepEvalBaseLLM):
     def __init__(self, model: str = "claude-haiku-4-5"):
         self.model_name = model
@@ -25,7 +41,10 @@ class AnthropicJudge(DeepEvalBaseLLM):
                 max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}],
                 output_config={
-                    "format": {"type": "json_schema", "schema": schema.model_json_schema()}
+                    "format": {
+                        "type": "json_schema",
+                        "schema": _strictify(schema.model_json_schema()),
+                    }
                 },
             )
             return schema.model_validate(json.loads(response.content[0].text))

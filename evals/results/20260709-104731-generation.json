@@ -1,0 +1,87 @@
+{
+  "dataset": "licensing-golden",
+  "env": "demo",
+  "k": 5,
+  "timestamp": "2026-07-09T14:43:44+00:00",
+  "generation": {
+    "faithfulness": 0.8542,
+    "answer_relevancy": 0.8958,
+    "idk_pass_rate": 1.0,
+    "judge": "claude-haiku-4-5",
+    "n": 12,
+    "per_question": [
+      {
+        "id": "g000",
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g001",
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g002",
+        "faithfulness": 0.5,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g003",
+        "faithfulness": 0.0,
+        "relevancy": 0.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g004",
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "model": "claude-opus-4-8"
+      },
+      {
+        "id": "g005",
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g006",
+        "faithfulness": 1,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g007",
+        "faithfulness": 1,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g008",
+        "faithfulness": 1.0,
+        "relevancy": 0.75,
+        "model": "claude-opus-4-8"
+      },
+      {
+        "id": "g009",
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g010",
+        "faithfulness": 0.75,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      },
+      {
+        "id": "g011",
+        "faithfulness": 1,
+        "relevancy": 1.0,
+        "model": "claude-haiku-4-5"
+      }
+    ]
+  }
+}

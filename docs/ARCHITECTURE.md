@@ -67,6 +67,13 @@ or in 20 lines of application code, and having it in code makes fusion parameter
 both transactionally-enough (D1 first, then Vectorize upsert keyed by chunk id;
 re-ingest is idempotent by document id).
 
+**ORM note.** Prisma was evaluated and rejected: the data layer's load-bearing
+pieces — the FTS5 virtual table, its sync triggers, and `bm25()` ranking — are
+exactly the surface an ORM cannot model, so it would reduce to raw-SQL escape
+hatches plus a second migration system beside `wrangler d1 migrations`. The
+dozen hand-written statements are validated at the boundary instead (zod on
+every request body, `satisfies`-checked against the shared TS contract).
+
 ### ADR-3: Embeddings & reranking on Workers AI (bge-m3 + bge-reranker-base)
 
 Anthropic has no embeddings API. Workers AI provides `@cf/baai/bge-m3` (embeddings)

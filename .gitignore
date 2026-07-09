@@ -1,0 +1,33 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+.dev.vars
+.dev.vars.*
+
+# Node
+node_modules/
+dist/
+.wrangler/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Ingestion artifacts (large, reproducible)
+data/processed/
+data/cache/
+
+# Eval scratch (committed results live in evals/results/)
+evals/.deepeval/
+.deepeval/
+.deepeval_telemetry.txt
+
+# OS / editor
+.DS_Store
+*.log

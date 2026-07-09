@@ -1,8 +1,34 @@
 # Eval results
 
-Dataset: `licensing-golden` (44 rows — 41 answerable incl. table/numerical,
-3 adversarial unanswerable), generated from the live demo corpus
-(4 documents, 498 chunks, 145 tables). K=5. See ADR-6.
+Dataset: `licensing-golden`, regenerated per corpus revision. K=5. See ADR-6.
+
+## Current — 7-document corpus + contextual table summaries (2026-07-09)
+
+68 golden rows (65 answerable) over 7 documents incl. the famously-hard IRS
+Form 1023, NY BitLicense, and CMS-855A. Chunks carry **contextual table
+summaries** (Anthropic contextual-retrieval technique: a situating line
+derived from reading-order context, indexed on both retrieval legs) plus
+state-abbreviation query expansion.
+
+| config | MRR | Recall@5 | Precision@5 | NDCG@5 |
+|---|---|---|---|---|
+| bm25-only | 0.500 | 0.631 | 0.150 | 0.533 |
+| dense-only | 0.641 | 0.831 | 0.166 | 0.688 |
+| hybrid rrf60 | 0.731 | 0.877 | 0.175 | 0.768 |
+| **hybrid rrf60 + rerank** | **0.891** | **0.954** | **0.209** | **0.907** |
+| bm25 + rerank | 0.872 | 0.923 | 0.204 | 0.885 |
+| dense + rerank | 0.888 | 0.954 | 0.191 | 0.904 |
+
+vs the pre-contextual 4-doc run (below): +0.138 MRR, +0.076 recall, +0.122
+NDCG on a *harder* corpus. The motivating failure — "in NY" questions never
+retrieving the survey's New York continuation tables (which don't repeat the
+state name) — is fixed and spot-verified live.
+
+Generation (n=12 + 3 unanswerable, judge=claude-haiku-4-5): Faithfulness
+**0.875**, Answer Relevancy **0.866**, refusal pass-rate **3/3**.
+Runs: `20260709-141507-stage1-7docs.json`, `20260709-141812-generation-7docs.json`.
+
+## Archive — initial 4-document corpus (2026-07-09, pre-contextual)
 
 ## Retrieval — stage 1: modes × rerank (2026-07-09, n=41)
 

@@ -2,14 +2,14 @@ import type { RetrievalConfig } from "@forma/shared";
 
 /**
  * Default retrieval configuration — selected by the licensing-golden sweep
- * (evals/results/20260709-103655-stage1.json, 20260709-104240-stage2.json,
- * n=41):
+ * (latest: evals/results/20260709-141507-stage1-7docs.json, n=65, 7-doc
+ * corpus with contextual table summaries):
  *
  *   mode        MRR    Recall@5  NDCG@5
- *   bm25-only   0.482  0.707     0.539
- *   dense-only  0.482  0.658     0.526
- *   hybrid      0.618  0.878     0.683   ← fusion beats both legs
- *   hybrid+rr   0.753  0.878     0.785   ← rerank +0.135 MRR, +0.102 NDCG
+ *   bm25-only   0.500  0.631     0.533
+ *   dense-only  0.641  0.831     0.688
+ *   hybrid      0.731  0.877     0.768   ← fusion beats both legs
+ *   hybrid+rr   0.891  0.954     0.907   ← rerank remains the largest lever
  *
  * rrfK ∈ {20,60,120} and decayLambda ∈ {0,0.1,0.3} are metric-neutral under
  * reranking on this corpus (identical scores) — rrfK stays at the literature

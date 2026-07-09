@@ -72,12 +72,29 @@ export function PdfViewer({ doc, highlight, onClearHighlight }: PdfViewerProps) 
   const pageWidth = Math.round(fitWidth * zoom);
 
   // After the target page paints, bring the flashed rects into view.
+  // NEVER scrollIntoView here: it scrolls every scrollable ancestor, and the
+  // overflow-hidden document is still *programmatically* scrollable — which
+  // shifted the whole app off screen with no way for the user to scroll back.
+  // Scroll math is scoped to the PDF container only.
   useEffect(() => {
     if (!highlight || highlight.nonce === scrolledNonceRef.current) return;
     if (effectivePage !== highlight.page) return;
-    if (firstRectRef.current) {
+    const container = containerRef.current;
+    if (container && firstRectRef.current) {
       scrolledNonceRef.current = highlight.nonce;
-      firstRectRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      const containerBox = container.getBoundingClientRect();
+      const targetBox = firstRectRef.current.getBoundingClientRect();
+      container.scrollTo({
+        top: Math.max(
+          0,
+          container.scrollTop + (targetBox.top - containerBox.top) - container.clientHeight / 2 + targetBox.height / 2,
+        ),
+        left: Math.max(
+          0,
+          container.scrollLeft + (targetBox.left - containerBox.left) - container.clientWidth / 2 + targetBox.width / 2,
+        ),
+        behavior: "smooth",
+      });
     } else if (renderTick > 0 && highlight.rects.length === 0) {
       scrolledNonceRef.current = highlight.nonce;
       containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });

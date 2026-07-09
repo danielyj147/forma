@@ -45,6 +45,15 @@ export default function App() {
 
   useEffect(() => onAccessRequired(() => setNeedsAccess(true)), []);
 
+  // Fixed-viewport app: the document must never scroll. overflow:hidden stops
+  // the user, but programmatic scrolling (scrollIntoView from any library,
+  // focus jumps) can still shift it and strand the page mid-scroll — snap back.
+  useEffect(() => {
+    const snapBack = () => window.scrollTo(0, 0);
+    window.addEventListener("scroll", snapBack);
+    return () => window.removeEventListener("scroll", snapBack);
+  }, []);
+
   const documentsQuery = useQuery({
     queryKey: ["documents"],
     queryFn: fetchDocuments,

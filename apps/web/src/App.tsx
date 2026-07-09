@@ -223,7 +223,7 @@ export default function App() {
             <TabsContent
               value="application"
               forceMount
-              className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden"
+              className="min-h-0 flex-1 flex-col data-[state=active]:flex data-[state=inactive]:hidden"
             >
               {selectedForm ? (
                 <FormPanel
@@ -243,7 +243,7 @@ export default function App() {
             <TabsContent
               value="assistant"
               forceMount
-              className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden"
+              className="min-h-0 flex-1 flex-col data-[state=active]:flex data-[state=inactive]:hidden"
             >
               <ChatPanel
                 selectedForm={selectedForm}
@@ -298,7 +298,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <TopBar />
       {content}
       {needsAccess && <AccessGate onUnlock={handleUnlock} />}

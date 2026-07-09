@@ -2,10 +2,19 @@ import type { Citation, FormContextEntry, SearchResult } from "@forma/shared";
 import type { Env } from "../env";
 import { anthropicClient, MODELS } from "./anthropic";
 
+export interface CorpusDoc {
+  id: string;
+  title: string;
+  state: string | null;
+  license_type: string | null;
+}
+
 export interface GenerationInput {
   question: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   results: SearchResult[];
+  /** Full ingested-document list so the model describes coverage accurately. */
+  corpus: CorpusDoc[];
   formContext?: FormContextEntry[];
   model: "haiku" | "opus";
 }
@@ -29,9 +38,20 @@ Hard rules — no exceptions:
 1. Every factual claim must cite its source with a bracketed number like [1] or [2][3], matching the context block it came from. Place citations immediately after the claim.
 2. If the context does not contain the information needed, reply exactly: "I do not know based on the ingested documents." and then state what additional document or detail would let you answer. Never guess, extrapolate, or use outside knowledge about regulations — regulations change and stale knowledge is dangerous.
 3. For numbers (fees, deadlines, thresholds, net-worth requirements), quote the exact figure from the context; re-check the table row and column before answering.
-4. Be concise and direct. Use short paragraphs or bullet lists. No preamble.`;
+4. Be concise and direct. Use short paragraphs or bullet lists. No preamble.
+5. When describing what documents or jurisdictions are AVAILABLE, use the <corpus> list — never infer coverage from which context blocks happened to be retrieved (retrieval returns a handful of chunks, not the corpus). If a question is too broad, ask a clarifying question and describe the options using the <corpus> list.`;
 
-function buildSystem(results: SearchResult[], formContext?: FormContextEntry[]): string {
+function corpusBlock(corpus: CorpusDoc[]): string {
+  const lines = corpus
+    .map(
+      (d) =>
+        `- "${d.title}" (jurisdiction: ${d.state ?? "multi-state"}, type: ${d.license_type ?? "general"})`,
+    )
+    .join("\n");
+  return `<corpus note="the complete set of ingested documents">\n${lines}\n</corpus>`;
+}
+
+function buildSystem(results: SearchResult[], corpus: CorpusDoc[], formContext?: FormContextEntry[]): string {
   const blocks = results
     .map(
       (r, i) =>
@@ -39,7 +59,7 @@ function buildSystem(results: SearchResult[], formContext?: FormContextEntry[]):
     )
     .join("\n\n");
 
-  let system = `${GROUNDING_RULES}\n\n${blocks || "<context>NO CONTEXT RETRIEVED</context>"}`;
+  let system = `${GROUNDING_RULES}\n\n${corpusBlock(corpus)}\n\n${blocks || "<context>NO CONTEXT RETRIEVED</context>"}`;
 
   if (formContext && formContext.length > 0) {
     // Late Context Injection (ADR-5): applicant data arrives per-request only,
@@ -61,7 +81,7 @@ export function streamAnswer(env: Env, input: GenerationInput) {
   return client.messages.stream({
     model,
     max_tokens: 1200,
-    system: buildSystem(input.results, input.formContext),
+    system: buildSystem(input.results, input.corpus, input.formContext),
     messages: [
       ...input.history.slice(-8).map((m) => ({ role: m.role, content: m.content })),
       { role: "user" as const, content: input.question },
@@ -76,7 +96,8 @@ export function streamSmallTalk(env: Env, input: Omit<GenerationInput, "results"
     model: MODELS.simple,
     max_tokens: 400,
     system:
-      "You are Forma, an assistant for regulatory licensing applications. The user's message needs no document lookup. Reply briefly and helpfully. If they ask anything about regulations, licensing requirements, fees, or forms, do NOT answer from memory — tell them you will look it up if they ask about one of the ingested documents.",
+      "You are Forma, an assistant for regulatory licensing applications. The user's message needs no document lookup. Reply briefly and helpfully. If they ask anything about regulations, licensing requirements, fees, or forms, do NOT answer from memory — offer to look it up in the ingested documents. If asked what you can help with, describe the ingested corpus:\n\n" +
+      corpusBlock(input.corpus),
     messages: [
       ...input.history.slice(-8).map((m) => ({ role: m.role, content: m.content })),
       { role: "user" as const, content: input.question },

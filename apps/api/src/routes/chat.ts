@@ -45,6 +45,7 @@ chat.post("/api/chat", accessCode, rateLimit, async (c) => {
         const s = streamSmallTalk(c.env, {
           question: lastUser.content,
           history,
+          corpus: docs.results,
           model: "haiku",
         });
         for await (const delta of textDeltas(s)) await emit({ type: "delta", text: delta });
@@ -65,6 +66,7 @@ chat.post("/api/chat", accessCode, rateLimit, async (c) => {
         question: lastUser.content,
         history,
         results,
+        corpus: docs.results,
         formContext: body.formContext,
         model: modelKind,
       });

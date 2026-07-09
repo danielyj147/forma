@@ -126,9 +126,7 @@ export function PdfViewer({ doc, highlight, onClearHighlight }: PdfViewerProps) 
         >
           <ChevronLeftIcon aria-hidden />
         </Button>
-        <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-          Page {effectivePage} of {totalPages ?? "—"}
-        </span>
+        <PageJump current={effectivePage} total={totalPages} onJump={goTo} />
         <Button
           variant="ghost"
           size="icon-sm"
@@ -228,3 +226,50 @@ function PageSkeleton({ width, bare = false }: { width: number; bare?: boolean }
 
 /** Default export so the viewer (and pdfjs) can be lazy-loaded. */
 export default PdfViewer;
+
+/** Editable page indicator: type a number + Enter (or blur) to jump. */
+function PageJump({
+  current,
+  total,
+  onJump,
+}: {
+  current: number;
+  total: number | null;
+  onJump: (page: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commit = (): void => {
+    if (draft !== null) {
+      const parsed = Number.parseInt(draft, 10);
+      if (Number.isFinite(parsed)) onJump(total ? Math.min(Math.max(parsed, 1), total) : Math.max(parsed, 1));
+    }
+    setDraft(null);
+  };
+
+  return (
+    <span className="flex items-center gap-1 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label="Go to page"
+        className="w-9 rounded-md border border-transparent bg-transparent py-0.5 text-center text-xs tabular-nums text-foreground transition-colors duration-150 hover:border-border focus:border-border focus:bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+        value={draft ?? String(current)}
+        onFocus={(e) => {
+          setDraft(String(current));
+          e.currentTarget.select();
+        }}
+        onChange={(e) => setDraft(e.currentTarget.value.replace(/[^0-9]/g, ""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            setDraft(null);
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={commit}
+      />
+      <span>of {total ?? "—"}</span>
+    </span>
+  );
+}

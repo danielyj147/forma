@@ -141,14 +141,28 @@ console.log(`\n✔ ${envName} provisioned. Next: npm run deploy:${envName === "p
 
 // --- helpers -------------------------------------------------------------------
 function wrangler(args, opts = {}) {
-  return execFileSync("npx", ["wrangler", ...args], { cwd: API_DIR, stdio: opts.stdio ?? "pipe" });
+  try {
+    return execFileSync("npx", ["wrangler", ...args], { cwd: API_DIR, stdio: opts.stdio ?? "pipe" });
+  } catch (e) {
+    e.wranglerOutput = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+    throw e;
+  }
 }
 function tryWrangler(args, okPattern) {
   try {
     wrangler(args);
   } catch (e) {
-    const msg = String(e.stdout ?? "") + String(e.stderr ?? "") + String(e.message ?? "");
-    if (!okPattern.test(msg)) throw e;
+    const msg = String(e.wranglerOutput ?? "") + String(e.message ?? "");
+    if (/enable R2 through the Cloudflare Dashboard|code: 10042/.test(msg)) {
+      fail(
+        "R2 is not enabled on this Cloudflare account yet (one-time, free).\n" +
+          "  Enable it in the dashboard: https://dash.cloudflare.com/?to=/:account/r2\n" +
+          "  then re-run `npm run setup` — it resumes where it left off.",
+      );
+    }
+    if (!okPattern.test(msg)) {
+      fail(`wrangler ${args.join(" ")} failed:\n${msg}`);
+    }
   }
 }
 function putSecret(name, value, configPath) {

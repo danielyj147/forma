@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck API
+        run: npx tsc --noEmit
+        working-directory: apps/api
+      - name: Unit tests (fusion, decay, FTS query, mock embeddings)
+        run: npx vitest run
+        working-directory: apps/api
+      - name: Build web app
+        run: npm run build -w apps/web
+
+  ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Compile-check ingestion + evals packages
+        run: |
+          uv sync --python 3.12 --extra evals
+          uv run python -m compileall -q src/
+          uv run python -m forma_ingest.cli --help
+        working-directory: ingestion

@@ -1,0 +1,45 @@
+{
+  "note": "Demo corpus. PDFs are public regulatory documents fetched from the sources below (not committed). Run scripts/fetch-corpus.sh to download, then the ingest commands.",
+  "documents": [
+    {
+      "docId": "fl-msb-registration",
+      "file": "data/pdfs/fl-msb-registration.pdf",
+      "title": "Florida OFR-560-01 — Application to Register as a Money Services Business",
+      "state": "FL",
+      "licenseType": "money-services-business",
+      "filingDate": "2023-02-01",
+      "sourceUrl": "https://flofr.gov/docs/default-source/documents/forms/ofr-560-01---application-to-register-as-a-money-services-business.pdf?sfvrsn=516d69be_1",
+      "why": "17-page real application form — the dynamic form-schema showcase"
+    },
+    {
+      "docId": "mtl-50-state-survey",
+      "file": "data/pdfs/mtl-50-state-survey.pdf",
+      "title": "50-State Survey: Money Transmitter Licensing Requirements",
+      "state": null,
+      "licenseType": "money-transmitter",
+      "filingDate": "2016-01-01",
+      "sourceUrl": "https://abnk.assembly.ca.gov/sites/abnk.assembly.ca.gov/files/50%20State%20Survey%20-%20MTL%20Licensing%20Requirements(72986803_4).pdf",
+      "why": "141 pages of per-state tables (fees, bonds, net worth) — the table-reasoning showcase"
+    },
+    {
+      "docId": "ak-money-transmitter-checklist",
+      "file": "data/pdfs/ak-mt-checklist.pdf",
+      "title": "Alaska Money Transmitter New Application Checklist",
+      "state": "AK",
+      "licenseType": "money-transmitter",
+      "filingDate": "2025-05-05",
+      "sourceUrl": "https://www.commerce.alaska.gov/web/Portals/3/pub/Money%20Transmitter%20Application%20Checklist%20Rev%20-%2020250505.pdf",
+      "why": "Recent (2025) filing-date — exercises the freshness/time-decay ranking"
+    },
+    {
+      "docId": "wa-mt-summary",
+      "file": "data/pdfs/wa-mt-summary.pdf",
+      "title": "Washington DFI — Summary of Money Transmitter Regulation",
+      "state": "WA",
+      "licenseType": "money-transmitter",
+      "filingDate": "2011-01-01",
+      "sourceUrl": "https://dfi.wa.gov/documents/money-transmitters/summary-mt-regulation.pdf",
+      "why": "Older summary — the decayed end of the freshness comparison"
+    }
+  ]
+}

@@ -23,9 +23,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Ingestion artifacts (large, reproducible)
+# Ingestion artifacts (large, reproducible; corpus PDFs re-fetchable via scripts/fetch-corpus.sh)
 data/processed/
 data/cache/
+data/pdfs/
 
 # Eval scratch (committed results live in evals/results/)
 evals/.deepeval/

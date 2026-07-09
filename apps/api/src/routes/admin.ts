@@ -33,13 +33,21 @@ admin.post("/api/admin/documents", async (c) => {
   const [doc, err] = await parseBody(c.req.raw, adminDocumentSchema);
   if (err) return c.json(err, 400);
 
-  // Clear prior chunks + vectors for idempotent re-ingest
+  // Clear prior chunks + vectors for idempotent re-ingest. Deletes are
+  // batched: a single DELETE over hundreds of rows fans out through the FTS
+  // sync triggers and can blow the D1 statement budget (observed 500s on the
+  // 411-chunk survey).
   const oldChunks = await c.env.DB.prepare("SELECT id FROM chunks WHERE document_id = ?1")
     .bind(doc.id)
     .all<{ id: string }>();
   if (oldChunks.results.length > 0) {
-    await vectorDelete(c.env, oldChunks.results.map((r) => r.id));
-    await c.env.DB.prepare("DELETE FROM chunks WHERE document_id = ?1").bind(doc.id).run();
+    const ids = oldChunks.results.map((r) => r.id);
+    await vectorDelete(c.env, ids);
+    for (let i = 0; i < ids.length; i += 40) {
+      await c.env.DB.batch(
+        ids.slice(i, i + 40).map((id) => c.env.DB.prepare("DELETE FROM chunks WHERE id = ?1").bind(id)),
+      );
+    }
   }
 
   await c.env.DB.prepare(
@@ -151,8 +159,13 @@ admin.delete("/api/admin/documents/:id", async (c) => {
   const chunks = await c.env.DB.prepare("SELECT id FROM chunks WHERE document_id = ?1")
     .bind(id)
     .all<{ id: string }>();
-  await vectorDelete(c.env, chunks.results.map((r) => r.id));
-  await c.env.DB.prepare("DELETE FROM chunks WHERE document_id = ?1").bind(id).run();
+  const ids = chunks.results.map((r) => r.id);
+  await vectorDelete(c.env, ids);
+  for (let i = 0; i < ids.length; i += 40) {
+    await c.env.DB.batch(
+      ids.slice(i, i + 40).map((cid) => c.env.DB.prepare("DELETE FROM chunks WHERE id = ?1").bind(cid)),
+    );
+  }
   const doc = await c.env.DB.prepare("SELECT pdf_key FROM documents WHERE id = ?1")
     .bind(id)
     .first<{ pdf_key: string | null }>();

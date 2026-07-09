@@ -62,8 +62,9 @@ export async function vectorDelete(env: Env, ids: string[]): Promise<void> {
     await env.DB.batch(stmts);
     return;
   }
-  for (let i = 0; i < ids.length; i += 500) {
-    await env.VECTORS!.deleteByIds(ids.slice(i, i + 500));
+  // Vectorize deleteByIds rejects payloads over 100 ids (code 40007)
+  for (let i = 0; i < ids.length; i += 100) {
+    await env.VECTORS!.deleteByIds(ids.slice(i, i + 100));
   }
 }
 

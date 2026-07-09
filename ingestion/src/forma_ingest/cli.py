@@ -102,12 +102,16 @@ def main() -> None:
     form_schema = None
     if not args.skip_schema:
         log.info("▶ generating form schema (Haiku 4.5, structured output)…")
-        markdown = doc.export_to_markdown()
-        form_schema = generate_form_schema(client, markdown, doc_id, title)
-        matched = attach_field_sources(doc, form_schema)
-        n_fields = sum(len(s["fields"]) for s in form_schema["sections"])
-        log.info("✔ schema: %d sections, %d fields (%d with PDF coordinates)",
-                 len(form_schema["sections"]), n_fields, matched)
+        try:
+            markdown = doc.export_to_markdown()
+            form_schema = generate_form_schema(client, markdown, doc_id, title)
+            matched = attach_field_sources(doc, form_schema)
+            n_fields = sum(len(s["fields"]) for s in form_schema["sections"])
+            log.info("✔ schema: %d sections, %d fields (%d with PDF coordinates)",
+                     len(form_schema["sections"]), n_fields, matched)
+        except Exception as e:  # very large forms can exceed output limits
+            log.warning("⚠ schema generation failed (%s) — continuing without a form schema", e)
+            form_schema = None
 
     meta = DocumentMeta(
         id=doc_id,

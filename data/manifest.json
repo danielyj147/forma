@@ -32,6 +32,36 @@
       "why": "Recent (2025) filing-date — exercises the freshness/time-decay ranking"
     },
     {
+      "docId": "irs-form-1023",
+      "file": "data/pdfs/irs-f1023.pdf",
+      "title": "IRS Form 1023 — Application for Recognition of Exemption Under Section 501(c)(3)",
+      "state": null,
+      "licenseType": "tax-exemption",
+      "filingDate": "2026-01-01",
+      "sourceUrl": "https://www.taxformfinder.org/forms/2025/2025-federal-form-1023.pdf",
+      "why": "Famously complex 28-page federal application — form-schema stress test"
+    },
+    {
+      "docId": "ny-bitlicense",
+      "file": "data/pdfs/ny-bitlicense-checklist.pdf",
+      "title": "New York DFS BitLicense — Virtual Currency Business Activity License Application Checklist",
+      "state": "NY",
+      "licenseType": "virtual-currency",
+      "filingDate": "2020-06-24",
+      "sourceUrl": "https://irstore.blob.core.windows.net/materials/c76e42b9-9319-45a0-923a-b10dc054357a.pdf",
+      "why": "The notorious 63-page fintech licensing checklist (23 NYCRR 200)"
+    },
+    {
+      "docId": "cms-855a",
+      "file": "data/pdfs/cms-855a.pdf",
+      "title": "CMS-855A — Medicare Enrollment Application for Institutional Providers",
+      "state": null,
+      "licenseType": "medicare-enrollment",
+      "filingDate": "2023-09-01",
+      "sourceUrl": "https://www.cms.gov/medicare/cms-forms/cms-forms/downloads/cms855a.pdf",
+      "why": "72 pages of institutional-provider enrollment — famously painful"
+    },
+    {
       "docId": "wa-mt-summary",
       "file": "data/pdfs/wa-mt-summary.pdf",
       "title": "Washington DFI — Summary of Money Transmitter Regulation",

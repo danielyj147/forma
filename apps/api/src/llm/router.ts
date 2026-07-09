@@ -78,7 +78,9 @@ export async function routeQuery(
       model: MODELS.router,
       max_tokens: 300,
       system:
-        "You route questions for a regulatory-licensing assistant. Decide whether the question needs document retrieval, rewrite it as a standalone search query (resolve pronouns from history), pick metadata filters only when the user clearly implies them, and classify complexity.\n\nAvailable documents:\n" +
+        "You route questions for a regulatory-licensing assistant.\n\n" +
+        "needsRetrieval RULE: any question about regulations, licensing, fees, bonds, forms, requirements, or eligibility gets needsRetrieval=true — INCLUDING questions about jurisdictions or topics that do not obviously appear in the document list below (the retrieval layer and grounding policy handle misses; you must not pre-judge coverage). needsRetrieval=false ONLY for greetings, thanks, or questions about the assistant itself.\n\n" +
+        "Also: rewrite the question as a standalone search query (resolve pronouns from history) and classify complexity.\n\nAvailable documents:\n" +
         docList,
       messages: [{ role: "user", content: `Conversation:\n${history}\n\nRoute the last user message.` }],
       output_config: { format: { type: "json_schema", schema: ROUTE_SCHEMA as unknown as Record<string, unknown> } },
@@ -95,14 +97,23 @@ export async function routeQuery(
       complexity: "simple" | "complex";
     };
 
+    // Inferred state/license are NOT applied as hard filters: multi-
+    // jurisdiction documents carry state=NULL and a "Georgia" question must
+    // still hit the 50-state survey. The rewritten query already carries the
+    // jurisdiction lexically/semantically; only explicit caller filters and a
+    // clearly-referenced documentId restrict the search.
+    // Deterministic backstop: a message with regulatory vocabulary must never
+    // skip retrieval, whatever the router said (LLM routing is not exact).
+    const regulatory =
+      /\b(licen[cs]|fee|bond|regulat|requirement|eligib|form|appl(y|ication)|attach|net worth|deadline|renew|statute|comply|compliance|transmit)/i.test(
+        lastUser,
+      );
+
     return {
-      needsRetrieval: parsed.needsRetrieval,
+      needsRetrieval: parsed.needsRetrieval || regulatory,
       query: parsed.query || lastUser,
       filters: {
-        // explicit request filters win over inferred ones
         ...(parsed.documentId ? { documentId: parsed.documentId } : {}),
-        ...(parsed.state ? { state: parsed.state } : {}),
-        ...(parsed.licenseType ? { licenseType: parsed.licenseType } : {}),
         ...(requestFilters ?? {}),
       },
       complexity: parsed.complexity,

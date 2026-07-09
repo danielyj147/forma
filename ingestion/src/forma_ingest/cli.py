@@ -46,10 +46,19 @@ def main() -> None:
         action="store_true",
         help="Parse + generate only; write JSON to data/processed/ without uploading",
     )
+    parser.add_argument(
+        "--from-json",
+        metavar="JSON",
+        help="Skip parsing/LLM: upload a data/processed/*.json produced by --dry-run (with --file as the PDF)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     load_dotenv(REPO_ROOT / ".env")
+
+    if args.from_json:
+        _upload_processed(Path(args.from_json), Path(args.file).expanduser().resolve(), args)
+        return
 
     # --- fetch / locate the PDF ------------------------------------------------
     if args.file.startswith(("http://", "https://")):
@@ -71,7 +80,7 @@ def main() -> None:
 
     # --- Docling (heavy imports deferred so --help stays fast) -----------------
     log.info("▶ parsing with Docling (first run downloads layout/table models)…")
-    import docling
+    from importlib.metadata import version as pkg_version
 
     from .llm import attach_field_sources, build_table_summaries, generate_form_schema
     from .models import DocumentMeta
@@ -108,7 +117,7 @@ def main() -> None:
         source_url=source_url,
         filing_date=args.filing_date,
         page_count=page_count,
-        docling_version=docling.__version__,
+        docling_version=pkg_version("docling"),
     )
     all_chunks = [c.to_payload() for c in (*text_chunks, *table_parents, *table_children)]
 
@@ -133,6 +142,23 @@ def main() -> None:
     embedded = api.upload_chunks(doc_id, all_chunks)
     api.upload_pdf(doc_id, pdf_path)
     log.info("✔ done: %s — %d chunks uploaded, %d embedded, PDF stored", doc_id, len(all_chunks), embedded)
+
+
+def _upload_processed(json_path: Path, pdf_path: Path, args) -> None:
+    from .uploader import ApiClient, resolve_target
+
+    data = json.loads(json_path.read_text())
+    doc = data["document"]
+    url, token = resolve_target(args.env, args.api_url, args.token, REPO_ROOT)
+    api = ApiClient(url, token)
+    health = api.health()
+    log.info("▶ uploading %s to %s (env=%s, mockAi=%s)", doc["id"], url,
+             health.get("environment"), health.get("mockAi"))
+    api.upsert_document(doc)
+    embedded = api.upload_chunks(doc["id"], data["chunks"])
+    api.upload_pdf(doc["id"], pdf_path)
+    log.info("✔ done: %s — %d chunks uploaded, %d embedded, PDF stored",
+             doc["id"], len(data["chunks"]), embedded)
 
 
 if __name__ == "__main__":

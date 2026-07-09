@@ -1,0 +1,43 @@
+/**
+ * Local-development config only. Deployments use a config generated from this
+ * file by `scripts/deploy.mjs`, which fills in the resource IDs provisioned by
+ * `npm run setup` on YOUR Cloudflare account (kept out of the repo so it stays
+ * account-agnostic).
+ *
+ * Local dev without a Cloudflare account: set DEV_MOCK_AI=1 in apps/api/.dev.vars
+ * to swap Workers AI + Vectorize for deterministic local mocks backed by D1.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "forma-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forma-db-local",
+      "database_id": "forma-db-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vectorize": [
+    { "binding": "VECTORS", "index_name": "forma-chunks-demo" }
+  ],
+  "r2_buckets": [
+    { "binding": "PDFS", "bucket_name": "forma-pdfs-local" }
+  ],
+  "kv_namespaces": [
+    { "binding": "RL", "id": "forma-rl-local" }
+  ],
+  "vars": {
+    "ENVIRONMENT": "dev"
+  },
+  "observability": { "enabled": true }
+}

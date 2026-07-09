@@ -1,0 +1,23 @@
+{
+  "name": "forma",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/web",
+    "test": "npm run test -w apps/api",
+    "setup": "node scripts/setup.mjs",
+    "deploy:demo": "node scripts/deploy.mjs demo",
+    "deploy:prod": "node scripts/deploy.mjs production"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

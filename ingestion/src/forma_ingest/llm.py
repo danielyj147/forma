@@ -274,7 +274,7 @@ def _critique_repair(client: Anthropic, draft: dict, title: str) -> dict:
     model policy. Streaming because repaired schemas can exceed 16k tokens."""
     with client.messages.stream(
         model=OPUS,
-        max_tokens=32_000,
+        max_tokens=64_000,
         system=CRITIQUE_SYSTEM,
         messages=[
             {

@@ -111,7 +111,12 @@ def main() -> None:
             form_schema = generate_example_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
         else:
             log.info("▶ regenerating form schema (map: Haiku / reduce: Opus 4.8)…")
-            form_schema = generate_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
+            try:
+                form_schema = generate_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
+            except Exception as e:
+                from .llm import generate_example_form_schema
+                log.warning("⚠ faithful extraction failed (%s) — no extractable form structure; designing an example form instead", e)
+                form_schema = generate_example_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
         matched = attach_field_sources(doc, form_schema)
         log.info("  %d fields matched to PDF coordinates", matched)
 
@@ -155,7 +160,12 @@ def main() -> None:
                 from .llm import generate_example_form_schema
                 form_schema = generate_example_form_schema(client, markdown, doc_id, title)
             else:
-                form_schema = generate_form_schema(client, markdown, doc_id, title)
+                try:
+                    form_schema = generate_form_schema(client, markdown, doc_id, title)
+                except Exception as e:
+                    from .llm import generate_example_form_schema
+                    log.warning("⚠ faithful extraction failed (%s) — designing an example form instead", e)
+                    form_schema = generate_example_form_schema(client, markdown, doc_id, title)
             matched = attach_field_sources(doc, form_schema)
             n_fields = sum(len(s["fields"]) for s in form_schema["sections"])
             log.info("✔ schema: %d sections, %d fields (%d with PDF coordinates)",

@@ -125,6 +125,42 @@ a JSON result + markdown summary to `evals/results/` (committed), and the winnin
 retrieval config is checked into `apps/api/src/retrieval/config.ts` with a pointer to
 the run that justified it.
 
+### ADR-7: Form-schema extraction — section-scoped map, Opus critique, conditional IR
+
+**Context.** Single-pass whole-document extraction produced three systematic
+defect classes: context-loss duplicates (a bare "Address" line under a
+"Mailing Address" heading extracted as both), wrong choice semantics
+(check-ONE groups rendered as multi-select checkboxes), and flattened
+skip-logic ("complete only if you answered Yes to 3a" became an
+unconditionally-required field).
+
+**Decision.** Three-stage pipeline mirroring how mature form systems model
+this (XLSForm/SurveyJS "relevance" expressions + extract-critique-repair):
+
+1. **Map (Haiku 4.5)** — fields are extracted per document section with the
+   heading breadcrumb in-prompt, so every label is contextually qualified at
+   the moment of extraction rather than repaired afterwards.
+2. **Reduce (Opus 4.8)** — a critique/repair pass over the assembled draft:
+   merges true duplicates (keeping branch-specific same-label fields that
+   carry different conditions), fixes choice semantics, and infers
+   `visibleIf`/`requiredIf` conditions from the form's own instruction
+   language. Cross-section reasoning about duplicate identity and branching
+   is complex-reasoning work — Opus per the model policy.
+3. **Validate (code)** — deterministic: unique ids, conditions may only
+   reference earlier fields, select/radio option sanity; fail-soft repairs
+   with logged warnings.
+
+The IR gains `FieldCondition { field, equals | in }` on `visibleIf` /
+`requiredIf`; the renderer evaluates conditions live, hides irrelevant
+branches, computes effective requiredness, and excludes hidden fields from
+progress and from chat form-context.
+
+**Measured on the corpus:** Florida OFR-560-01 went from 8 flat sections /
+context-lost duplicates to 169 fields with 62 skip-logic conditions and 25
+draft duplicates removed by the critique pass; Alaska extracts entity-type
+branching (LLC vs corporation vs nonprofit document requirements) as
+mutually exclusive `visibleIf` branches.
+
 ## Environments
 
 | | demo | production |

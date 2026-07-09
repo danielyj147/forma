@@ -20,12 +20,14 @@ import { cn } from "@/lib/utils";
 interface FieldInputProps {
   field: FormField;
   value: FormValue | undefined;
+  /** Effective required state (static `required` OR a met `requiredIf`). */
+  required: boolean;
   onChange: (value: FormValue) => void;
   /** Highlight this field's source rects in the PDF viewer. */
   onShowSource: (field: FormField) => void;
 }
 
-export function FieldInput({ field, value, onChange, onShowSource }: FieldInputProps) {
+export function FieldInput({ field, value, required, onChange, onShowSource }: FieldInputProps) {
   const inputId = useId();
   const hasSource = Boolean(field.source && field.source.length > 0);
   const options = (field.options ?? []).filter((option) => option.value !== "");
@@ -42,7 +44,7 @@ export function FieldInput({ field, value, onChange, onShowSource }: FieldInputP
           className="gap-1 text-[13px] leading-snug"
         >
           {field.label}
-          {field.required && (
+          {required && (
             <span className="text-primary" aria-label="required">
               *
             </span>

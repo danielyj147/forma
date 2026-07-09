@@ -59,8 +59,77 @@ def build_table_summaries(client: Anthropic, parents: list[Chunk], doc_title: st
 
 
 # ---------------------------------------------------------------------------
-# Form schema generation (Docling markdown -> strict JSON -> Ashby-style UI)
+# Form schema generation — two-stage design (see docs/ARCHITECTURE.md ADR-7):
+#
+#   MAP    (Haiku):  extract fields per document section, with the heading
+#                    breadcrumb in-context so "Address" under "Mailing Address"
+#                    can never collapse into a context-free duplicate.
+#   REDUCE (Opus):   critique + repair the assembled draft — merge true
+#                    duplicates, fix one-only groups (checkbox -> radio),
+#                    infer skip-logic (visibleIf/requiredIf) from the form's
+#                    own instruction language.
+#   VALIDATE (code): deterministic checks — unique ids, forward-only condition
+#                    references, options sanity. Fail-soft with warnings.
+#
+# The IR intentionally mirrors XLSForm/SurveyJS "relevance" semantics: a
+# minimal equality/membership condition on one controlling field.
 # ---------------------------------------------------------------------------
+
+OPUS = "claude-opus-4-8"
+
+CONDITION_JSON = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["field"],
+    "properties": {
+        "field": {"type": "string", "description": "id of the controlling field (must appear earlier in the form)"},
+        "equals": {"anyOf": [{"type": "string"}, {"type": "boolean"}]},
+        "in": {"type": "array", "items": {"type": "string"}},
+    },
+}
+
+FIELD_JSON = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "label", "type"],
+    "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "type": {
+            "type": "string",
+            "enum": ["text", "textarea", "number", "date", "select", "checkbox", "radio", "file"],
+        },
+        "required": {"type": "boolean"},
+        "help": {"type": "string"},
+        "placeholder": {"type": "string"},
+        "options": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["value", "label"],
+                "properties": {
+                    "value": {"type": "string"},
+                    "label": {"type": "string"},
+                },
+            },
+        },
+        "visibleIf": CONDITION_JSON,
+        "requiredIf": CONDITION_JSON,
+    },
+}
+
+SECTION_JSON = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "title", "fields"],
+    "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "fields": {"type": "array", "items": FIELD_JSON},
+    },
+}
 
 FORM_SCHEMA_JSON = {
     "type": "object",
@@ -68,89 +137,176 @@ FORM_SCHEMA_JSON = {
     "required": ["title", "sections"],
     "properties": {
         "title": {"type": "string"},
-        "sections": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["id", "title", "fields"],
-                "properties": {
-                    "id": {"type": "string"},
-                    "title": {"type": "string"},
-                    "description": {"type": "string"},
-                    "fields": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["id", "label", "type"],
-                            "properties": {
-                                "id": {"type": "string"},
-                                "label": {"type": "string"},
-                                "type": {
-                                    "type": "string",
-                                    "enum": [
-                                        "text",
-                                        "textarea",
-                                        "number",
-                                        "date",
-                                        "select",
-                                        "checkbox",
-                                        "radio",
-                                        "file",
-                                    ],
-                                },
-                                "required": {"type": "boolean"},
-                                "help": {"type": "string"},
-                                "placeholder": {"type": "string"},
-                                "options": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["value", "label"],
-                                        "properties": {
-                                            "value": {"type": "string"},
-                                            "label": {"type": "string"},
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        "sections": {"type": "array", "items": SECTION_JSON},
     },
 }
 
-SCHEMA_SYSTEM = """You convert a government/regulatory licensing application (given as structural markdown extracted by Docling) into a clean web-form schema.
+MAP_OUTPUT_JSON = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["title", "fields"],
+    "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "fields": {"type": "array", "items": FIELD_JSON},
+    },
+}
+
+MAP_SYSTEM = """You extract the fillable fields of ONE SECTION of a government/regulatory licensing application (structural markdown from Docling). The section's heading path in the document is given — use it to write CONTEXTUAL labels: a bare "Address" line under the "Mailing Address" heading is labeled "Mailing address", not "Address".
 
 Rules:
-- Mirror the document's own section structure and field order.
-- Every fillable item in the document becomes a field with the most specific type: checkboxes for yes/no or check-all-that-apply, select/radio for enumerated choices (include the options), date for dates, number for amounts/counts, file for required attachments/exhibits, textarea for narrative answers.
-- Field ids: short snake_case, unique across the whole form. Section ids: snake_case.
-- `required: true` when the document marks an item mandatory (or it is clearly mandatory).
-- Put fee amounts, statutory references, or instructions in `help` (short!).
-- Skip page headers/footers, signature blocks rendered as images, and instructions-only pages (fold key instructions into section descriptions).
-- 3-30 fields per section. Do not invent fields that are not in the document."""
+- Only fields a filer actually fills IN THIS SECTION, in document order. Do not invent fields; do not repeat fields that clearly belong to another section's heading context.
+- Most specific type: radio/select for choose-ONE enumerations ("check one", either/or), checkbox for yes/no or check-ALL-that-apply (include options), date, number for amounts/counts, file for required attachments/exhibits, textarea for narrative answers, text otherwise.
+- If the section text conditions a field on an earlier answer IN THIS SECTION ("If yes, …", "complete only if …"), express it as visibleIf/requiredIf on the controlling field's id.
+- `required: true` only when the document marks the item mandatory or it is unmistakably mandatory.
+- Fee amounts, statutory references, key instructions -> short `help` texts.
+- Instructions-only content -> return zero fields (fold anything essential into `description`).
+- ids: short snake_case, prefixed to be unique (use the given section prefix)."""
+
+CRITIQUE_SYSTEM = """You are reviewing a DRAFT web-form schema that was extracted section-by-section from a government licensing application. Your job is critique-and-repair, producing the final schema. The section drafts were extracted independently, so cross-section defects are expected. Fix exactly these classes of problems:
+
+1. DUPLICATES: two fields describing the same physical form item (usually created by overlapping heading context, e.g. "address" and "mailing_address"). Keep ONE — the more contextually specific label — in its correct section. Never keep both. But do NOT merge fields that are genuinely distinct (business address vs mailing address IS distinct when the document asks for both).
+2. CHOICE SEMANTICS: "check one" enumerations must be radio (or select when more than ~6 options); "check all that apply" must be checkbox with options; lone yes/no items must be a single checkbox (no options).
+3. SKIP-LOGIC: where a field's own help/label/section description says it applies only under a prior answer ("If you answered Yes to …", "only if …", "skip to Section N unless …"), attach visibleIf (and requiredIf when it becomes mandatory in that branch) referencing the controlling field's id. Conditions may now cross sections. Only encode conditions the document actually states.
+4. IDS & ORDER: snake_case ids unique across the whole form; keep the document's section and field order; sections with zero fields are dropped; a controlling field must appear before its dependents.
+5. Do NOT invent new fields, options, or conditions that are not in the draft or clearly implied by it. Preserve `help` texts (shorten if verbose).
+
+Return the complete corrected schema."""
 
 
-def generate_form_schema(client: Anthropic, doc_markdown: str, doc_id: str, title: str) -> dict:
-    response = client.messages.create(
-        model=HAIKU,
-        max_tokens=16000,
-        system=SCHEMA_SYSTEM,
+def _split_sections(markdown: str, max_chars: int = 12_000, min_chars: int = 400) -> list[tuple[str, str]]:
+    """Split Docling markdown on headings, carrying the heading breadcrumb.
+    Small consecutive sections merge; oversized ones split on paragraph breaks."""
+    import re as _re
+
+    heading = _re.compile(r"^(#{1,4})\s+(.+)$")
+    stack: list[str] = []
+    raw: list[tuple[str, list[str]]] = [("(document start)", [])]
+    for line in markdown.splitlines():
+        m = heading.match(line)
+        if m:
+            level = len(m.group(1))
+            stack = stack[: level - 1] + [m.group(2).strip()]
+            raw.append((" > ".join(stack), [line]))
+        else:
+            raw[-1][1].append(line)
+
+    sections: list[tuple[str, str]] = []
+    for crumb, lines in raw:
+        text = "\n".join(lines).strip()
+        if not text:
+            continue
+        # merge small continuations into the previous block (same top heading)
+        if sections and len(text) < min_chars and len(sections[-1][1]) + len(text) < max_chars:
+            prev_crumb, prev_text = sections[-1]
+            sections[-1] = (prev_crumb, prev_text + "\n\n" + text)
+            continue
+        while len(text) > max_chars:  # split giant sections at paragraph breaks
+            cut = text.rfind("\n\n", 0, max_chars)
+            cut = cut if cut > min_chars else max_chars
+            sections.append((crumb, text[:cut].strip()))
+            text = text[cut:].strip()
+        sections.append((crumb, text))
+    return sections
+
+
+def _map_section(client: Anthropic, crumb: str, text: str, title: str, prefix: str) -> dict | None:
+    try:
+        response = client.messages.create(
+            model=HAIKU,
+            max_tokens=8000,
+            system=MAP_SYSTEM,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Document: {title}\nSection heading path: {crumb}\n"
+                        f"Field id prefix: {prefix}\n\n<section_markdown>\n{text}\n</section_markdown>"
+                    ),
+                }
+            ],
+            output_config={"format": {"type": "json_schema", "schema": MAP_OUTPUT_JSON}},
+        )
+        return json.loads(response.content[0].text)
+    except Exception as e:
+        log.warning("  map failed for section %r: %s", crumb[:60], e)
+        return None
+
+
+def _critique_repair(client: Anthropic, draft: dict, title: str) -> dict:
+    """Opus 4.8 cross-section repair — this is genuinely complex reasoning
+    (duplicate identity, branching logic), which is Opus territory per the
+    model policy. Streaming because repaired schemas can exceed 16k tokens."""
+    with client.messages.stream(
+        model=OPUS,
+        max_tokens=32_000,
+        system=CRITIQUE_SYSTEM,
         messages=[
             {
                 "role": "user",
-                "content": f"Document title: {title}\n\n<document_markdown>\n{doc_markdown[:120_000]}\n</document_markdown>",
+                "content": f"Document: {title}\n\n<draft_schema>\n{json.dumps(draft, indent=1)}\n</draft_schema>",
             }
         ],
         output_config={"format": {"type": "json_schema", "schema": FORM_SCHEMA_JSON}},
-    )
-    schema = json.loads(response.content[0].text)
+    ) as stream:
+        response = stream.get_final_message()
+    return json.loads(response.content[0].text)
+
+
+def _validate_schema(schema: dict) -> int:
+    """Deterministic post-validation; repairs in place, returns warning count."""
+    warnings = 0
+    seen_ids: set[str] = set()
+    schema["sections"] = [s for s in schema.get("sections", []) if s.get("fields")]
+    for section in schema["sections"]:
+        for field in section["fields"]:
+            if field["id"] in seen_ids:  # duplicate id -> suffix, keep both visible
+                base, n = field["id"], 2
+                while f"{base}_{n}" in seen_ids:
+                    n += 1
+                field["id"] = f"{base}_{n}"
+                warnings += 1
+            seen_ids.add(field["id"])
+            if field.get("type") in ("select", "radio") and len(field.get("options") or []) < 2:
+                field["type"] = "text" if not field.get("options") else "checkbox"
+                warnings += 1
+    # conditions must reference an already-seen (earlier) field
+    ordered: set[str] = set()
+    for section in schema["sections"]:
+        for field in section["fields"]:
+            for key in ("visibleIf", "requiredIf"):
+                cond = field.get(key)
+                if cond and cond.get("field") not in ordered:
+                    field.pop(key, None)
+                    warnings += 1
+            ordered.add(field["id"])
+    if warnings:
+        log.warning("  schema validation repaired %d issue(s)", warnings)
+    return warnings
+
+
+def generate_form_schema(client: Anthropic, doc_markdown: str, doc_id: str, title: str) -> dict:
+    sections = _split_sections(doc_markdown)
+    log.info("  map stage: %d sections (Haiku)", len(sections))
+    draft_sections: list[dict] = []
+    for i, (crumb, text) in enumerate(sections):
+        out = _map_section(client, crumb, text, title, prefix=f"s{i:02d}")
+        if out and out.get("fields"):
+            out["id"] = f"s{i:02d}"
+            draft_sections.append(out)
+    if not draft_sections:
+        raise RuntimeError("map stage extracted no fields")
+
+    n_draft = sum(len(s["fields"]) for s in draft_sections)
+    log.info("  reduce stage: critique/repair of %d draft fields (Opus 4.8)", n_draft)
+    schema = _critique_repair(client, {"title": title, "sections": draft_sections}, title)
+    _validate_schema(schema)
     schema["documentId"] = doc_id
+    n_final = sum(len(s["fields"]) for s in schema["sections"])
+    n_cond = sum(
+        1 for s in schema["sections"] for f in s["fields"] if f.get("visibleIf") or f.get("requiredIf")
+    )
+    log.info("  final: %d fields (%+d vs draft), %d with skip-logic conditions", n_final, n_final - n_draft, n_cond)
     return schema
 
 

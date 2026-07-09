@@ -131,6 +131,21 @@ admin.post("/api/admin/chunks", async (c) => {
   return c.json({ ok: true, inserted: body.chunks.length, embedded: embeddable.length });
 });
 
+// Schema-only update: regenerating a form schema must not disturb the
+// document's chunks/vectors (unlike a full document upsert).
+admin.patch("/api/admin/documents/:id/schema", async (c) => {
+  const id = c.req.param("id");
+  const body = (await c.req.json().catch(() => null)) as { formSchema?: unknown } | null;
+  if (!body?.formSchema || typeof body.formSchema !== "object") {
+    return c.json({ error: "formSchema (object) required" }, 400);
+  }
+  const result = await c.env.DB.prepare("UPDATE documents SET form_schema = ?1 WHERE id = ?2")
+    .bind(JSON.stringify(body.formSchema), id)
+    .run();
+  if (!result.meta.changes) return c.json({ error: "document not found" }, 404);
+  return c.json({ ok: true, id });
+});
+
 admin.delete("/api/admin/documents/:id", async (c) => {
   const id = c.req.param("id");
   const chunks = await c.env.DB.prepare("SELECT id FROM chunks WHERE document_id = ?1")

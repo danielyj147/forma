@@ -51,6 +51,11 @@ def main() -> None:
         metavar="JSON",
         help="Skip parsing/LLM: upload a data/processed/*.json produced by --dry-run (with --file as the PDF)",
     )
+    parser.add_argument(
+        "--schema-only",
+        action="store_true",
+        help="Re-parse the PDF, regenerate ONLY the form schema (map/reduce pipeline) and PATCH it — chunks/vectors untouched",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -87,6 +92,37 @@ def main() -> None:
     from .pipeline import convert_pdf, extract_chunks
 
     doc = convert_pdf(str(pdf_path))
+
+    if args.schema_only:
+        from anthropic import Anthropic
+
+        if not args.doc_id:
+            raise SystemExit("--schema-only requires --doc-id (the existing document id)")
+        client = Anthropic()
+        log.info("▶ regenerating form schema (map: Haiku / reduce: Opus 4.8)…")
+        form_schema = generate_form_schema(client, doc.export_to_markdown(), args.doc_id, title)
+        matched = attach_field_sources(doc, form_schema)
+        log.info("  %d fields matched to PDF coordinates", matched)
+
+        # keep the processed JSON in sync so --from-json replays carry the new schema
+        processed = REPO_ROOT / "data" / "processed" / f"{args.doc_id}.json"
+        if processed.exists():
+            data = json.loads(processed.read_text())
+            data["document"]["formSchema"] = form_schema
+            processed.write_text(json.dumps(data, indent=2))
+            log.info("  updated %s", processed.relative_to(REPO_ROOT))
+
+        if args.dry_run:
+            log.info("✔ dry run — schema not uploaded")
+            return
+        from .uploader import ApiClient, resolve_target
+
+        url, token = resolve_target(args.env, args.api_url, args.token, REPO_ROOT)
+        api = ApiClient(url, token)
+        api.patch_schema(args.doc_id, form_schema)
+        log.info("✔ schema updated for %s on %s", args.doc_id, url)
+        return
+
     page_count = len(doc.pages)
     text_chunks, table_parents = extract_chunks(doc, doc_id, max_tokens=args.max_tokens)
     log.info("✔ parsed: %d pages, %d text chunks, %d tables", page_count, len(text_chunks), len(table_parents))

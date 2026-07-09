@@ -33,6 +33,14 @@ class ApiClient:
         r.raise_for_status()
         return r.json()
 
+    def patch_schema(self, document_id: str, form_schema: dict) -> dict:
+        r = self.http.patch(
+            f"{self.base_url}/api/admin/documents/{document_id}/schema",
+            json={"formSchema": form_schema},
+        )
+        r.raise_for_status()
+        return r.json()
+
     def upload_chunks(self, document_id: str, chunks: list[dict]) -> int:
         embedded = 0
         for i in range(0, len(chunks), CHUNK_BATCH):

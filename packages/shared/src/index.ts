@@ -51,6 +51,20 @@ export interface FormFieldOption {
   label: string;
 }
 
+/**
+ * Conditional expression over a sibling field's current value (XLSForm-style
+ * "relevance"). Kept deliberately minimal: equality / set membership on a
+ * single controlling field, which covers the skip-logic real government forms
+ * use ("If you answered Yes to 3a…"). `field` must reference an earlier field.
+ */
+export interface FieldCondition {
+  field: string;
+  /** Matches when the controlling value equals this (checkbox: boolean). */
+  equals?: string | boolean;
+  /** Matches when the controlling value is any of these. */
+  in?: string[];
+}
+
 export interface FormField {
   id: string;
   label: string;
@@ -59,6 +73,10 @@ export interface FormField {
   help?: string;
   placeholder?: string;
   options?: FormFieldOption[]; // select | radio | checkbox groups
+  /** Show this field only when the condition holds (skip-logic). */
+  visibleIf?: FieldCondition;
+  /** Field becomes required only when the condition holds. */
+  requiredIf?: FieldCondition;
   /** Where this field appears in the source PDF (for highlight-on-focus). */
   source?: SourceRect[];
 }

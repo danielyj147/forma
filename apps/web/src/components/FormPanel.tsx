@@ -14,7 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FieldInput } from "@/components/FieldInput";
-import { requiredProgress } from "@/lib/form";
+import { isFieldRequired, isFieldVisible, requiredProgress } from "@/lib/form";
 import type { FormValue, FormValues } from "@/lib/storage";
 
 export type SchemaState =
@@ -140,11 +140,12 @@ export function FormPanel({
                     )}
                   </CardHeader>
                   <CardContent className="flex flex-col gap-5">
-                    {section.fields.map((field) => (
+                    {section.fields.filter((field) => isFieldVisible(field, values)).map((field) => (
                       <FieldInput
                         key={field.id}
                         field={field}
                         value={values[field.id]}
+                        required={isFieldRequired(field, values)}
                         onChange={(value) => onValueChange(field.id, value)}
                         onShowSource={onShowSource}
                       />
